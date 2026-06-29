@@ -23,6 +23,29 @@ setsid bash -c 'pi ... > log 2>&1' </dev/null &
 `scripts/dispatch.sh` does exactly this. Always launch through it (or replicate
 the `setsid … </dev/null &` form).
 
+## Dispatch one specific vendor model
+
+The canonical way to target a specific vendor model in the pi harness is the
+`--provider` + `--model` pair:
+
+```bash
+pi --provider amazon-bedrock --model eu.anthropic.claude-opus-4-8 --print --no-session "…"
+```
+
+pi also accepts a **shorthand** on `--model` alone: `provider/id` with an optional
+`:<thinking>` suffix (per `pi --help`). These are equivalent to the above:
+
+```bash
+pi --model amazon-bedrock/eu.anthropic.claude-opus-4-8 --print --no-session "…"
+pi --model amazon-bedrock/eu.anthropic.claude-opus-4-8:high --print --no-session "…"
+```
+
+Useful flags: `--print` (non-interactive, exit after answer), `--no-session`
+(don't persist), `--thinking off|minimal|low|medium|high|xhigh`. `dispatch.sh`
+takes specs in the `provider/model` form and splits on the **first `/`** into
+`--provider`/`--model` (model ids contain dots, never slashes, so the split is
+unambiguous).
+
 ## Step 1 — verify the models exist (cheap; avoids silent failures)
 
 Dispatching against a hallucinated model id just exits 0-bytes. Confirm first:
