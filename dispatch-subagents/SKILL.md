@@ -67,16 +67,21 @@ Optionally smoke-test one model before a big run:
 pi --provider deepseek --model deepseek-v4-pro --print --no-session "Reply PONG"
 ```
 
-### Models enabled on this machine (verified 2026-06-28; re-check with list-models.sh)
+### Models enabled on this machine (verified 2026-07-04; re-check with list-models.sh)
 
 | Provider (`--provider`) | Model (`--model`) | Notes |
 |---|---|---|
-| `amazon-bedrock` | `eu.anthropic.claude-opus-4-8` | configured default; region-prefixed inference profile |
-| `kimi-ai` | `kimi-k2.7-code` | also `-highspeed`, `kimi-k2.6`, `kimi-k2.5` (models.json) |
+| `anthropic` | `claude-fable-5` | configured default (oauth); also `claude-opus-4-8`, `claude-sonnet-5` |
+| `amazon-bedrock` | `global.anthropic.claude-opus-4-8` | note `global.` prefix (the old `eu.` profile id is gone); also `global.anthropic.claude-sonnet-5` |
+| `openai-codex` | `gpt-5.5` | oauth |
 | `zai-coding-cn` | `glm-5.2` | **5-hour usage quota** — emits a Chinese `429 已达到…使用上限` and produces no review when exhausted |
 | `deepseek` | `deepseek-v4-pro` | also `deepseek-v4-flash` |
+| `kimi-ai` | ~~`kimi-k2.7-code`~~ | **DEAD 2026-07-04**: key present in auth.json but Moonshot returns `401 Invalid Authentication` — smoke-test before including in a panel |
 
-Other providers with creds: `kimi-coding`, `openai-codex`.
+Removed since last verification: `openai` (api_key entry deleted from auth.json —
+`gpt-5-codex`/`gpt-5.5-pro` unusable). A key can die BETWEEN runs on the same
+day (kimi worked at 07:13, 401 by 08:30) — the cheap PONG smoke test per model
+before a big dispatch is not optional hygiene, it is how you find this.
 
 ## Step 2 — write the prompt
 
