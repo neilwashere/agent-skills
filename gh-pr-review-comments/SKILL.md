@@ -1,6 +1,6 @@
 ---
 name: gh-pr-review-comments
-description: Read, reply to, and post inline GitHub PR review comments at scale via the gh API, and verify replies landed. Use when addressing reviewer feedback on a PR (leaving "addressed in <sha>" replies) or when an agent posts inline review findings. Covers the secondary-rate-limit ("abuse") gotcha, pagination limits, the exact reply/post recipes, and verifying committed vs working-tree state.
+description: Read, reply to, and post inline GitHub PR review comments at scale via the gh API, and verify replies landed. Use when addressing reviewer feedback on a PR (leaving "addressed in <sha>" replies) or when an agent posts inline review findings. Ships scripts/ for posting a whole batch of inline findings as ONE atomic pending review (draft -> verify -> finalise, single event). Covers the -f vs -F @file gotcha, the secondary-rate-limit ("abuse") gotcha, pagination limits, the exact reply/post recipes, and verifying committed vs working-tree state.
 ---
 
 # gh-pr-review-comments
@@ -27,7 +27,38 @@ gh api repos/OWNER/REPO/pulls/N/comments/COMMENT_ID/replies \
   -f body="Addressed in <short-sha>."
 ```
 
-## Post a NEW inline comment (e.g. a review finding)
+## Post a BATCH of inline findings — use the atomic review scripts, not N POSTs
+
+**Default for 2+ findings.** One-by-one `POST /pulls/N/comments` emits one
+event + notification per comment, is exposed to the abuse rate limit mid-batch,
+and a failure leaves a partial review on the PR. The scripts in `scripts/`
+instead stage everything as a single **PENDING review** — invisible, event-less,
+all comment anchors validated server-side in one shot (a 422 means NOTHING
+landed) — and only the final submit emits one review event:
+
+```bash
+# 1. bodies in files (NEVER shell strings), one JSON manifest:
+#    {"repo":"o/r","pr":3,"commit":"<full 40-char sha>",
+#     "comments":[{"path":"src/x.ts","line":224,"bodyFile":"/tmp/c1.md"}, ...]}
+scripts/review-create.sh manifest.json          # -> review_id, state: PENDING
+
+# 2. verify by CONTENT (prints every body; fails on empty/'@'-prefixed bodies)
+scripts/review-verify.sh --pr 3 --review-id ID --expect 11 --full
+
+# 3. amendments needed? discard + re-create — still zero events emitted
+scripts/review-discard.sh --pr 3 --review-id ID
+
+# 4. finalise — THIS single call emits the one review event/notification
+scripts/review-submit.sh --pr 3 --review-id ID              # event: COMMENT
+```
+
+- Only ONE pending review per user per PR — `review-create.sh` detects a
+  leftover and refuses with the submit/discard commands to run.
+- Pending comments expose only diff `position` until submit (`line` is null);
+  `review-verify.sh` labels this. Content, not count, is the verification.
+- `review-submit.sh` defaults to `--event COMMENT` (APPROVE on your own PR 422s).
+
+## Post ONE inline comment (single finding / quick follow-up)
 
 ```bash
 gh api repos/OWNER/REPO/pulls/N/comments \
@@ -40,6 +71,21 @@ gh api repos/OWNER/REPO/pulls/N/comments \
 
 - `commit_id` must be the **full** sha; `line` must exist on the RIGHT side at
   that commit. Use `-F` (not `-f`) for the integer `line`.
+
+## THE @file gotcha: `-f body=@file` posts the LITERAL STRING
+
+A real batch once landed as 11 comments whose bodies were the text
+`@/tmp/c1.md`. In `gh api`, only **`-F`** expands `@<path>`/`@-` to file/stdin
+contents; **`-f` is always a raw string**. Corollaries, learned the same day:
+
+- Long/markdown bodies **always go in files**, and payloads are built with
+  `jq --rawfile` + `gh api --input -` (the scripts do this) — inline
+  `bash -c` strings with apostrophes/backticks/parens also broke quoting.
+- Verification must check comment **content**, not existence — "11/11 found"
+  looked green while every body was garbage. `review-verify.sh` refuses
+  `@`-prefixed and empty bodies for exactly this reason.
+- If it does happen, repair in place: `gh api -X PATCH
+  repos/OWNER/REPO/pulls/comments/ID -F body=@file.md` (note: `-F`).
 
 ## THE rate-limit gotcha (secondary limit / "abuse")
 

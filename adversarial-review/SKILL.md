@@ -94,11 +94,16 @@ concrete task block (see below). Follow that skill for model discovery
    issue, keep cross-model agreement as a signal ("flagged by: …"), preserve
    genuine disagreement (one model clearing what others flag is information, not
    noise). Rank `HIGH / MEDIUM / LOW`.
-6. **Post inline**, ranked, via the `gh-pr-review-comments` skill. Key gotchas
-   from that skill: full 40-char `commit_id`; the target `line` must be in the
-   diff on the RIGHT side (verify, and re-anchor to the nearest in-diff line if
-   not); space posts ~3s apart and back off 30s on a `422 abuse` secondary-rate
-   limit. Tag each comment with the panel + which models flagged it.
+6. **Post inline**, ranked, via the `gh-pr-review-comments` skill's ATOMIC
+   review scripts (`scripts/review-create.sh` → `review-verify.sh` →
+   `review-submit.sh`): all findings go up as one PENDING review (no events,
+   server-validated anchors, a 422 means nothing landed), get verified by
+   content, and only the final submit emits the single review event. Bodies in
+   files + a JSON manifest — never shell strings, never one-POST-per-comment.
+   Key gotchas still apply: full 40-char `commit_id`; the target `line` must be
+   in the diff on the RIGHT side. Model attribution per comment is optional —
+   ask the operator (cross-model agreement is signal, but some prefer
+   attribution-free comments).
 7. **Verification pass** (when the author pushes fixes): ff-update the branch,
    regenerate the diff, fetch the threads + replies, re-dispatch the same panel
    in verify mode, reply on each thread with the consensus verdict, open new
