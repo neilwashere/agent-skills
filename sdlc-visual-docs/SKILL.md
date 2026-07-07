@@ -26,7 +26,7 @@ Announce at start: "Using sdlc-visual-docs to lint/render the artefact."
 ```bash
 node scripts/lint.mjs <artefact.md>            # validate the IA graph (follows upstream)
 node scripts/render.mjs <artefact.md> -o out.html   # render one self-contained page
-node --test scripts/                            # run the skill's own tests
+node --test scripts/*.test.mjs                  # run the skill's own tests
 ```
 
 Paths are relative to this skill directory; artefact paths are wherever the
