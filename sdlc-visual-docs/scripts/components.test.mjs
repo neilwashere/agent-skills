@@ -27,12 +27,20 @@ test("good chain: every node is covered", () => {
 test("uncovered nodes are detected and highlighted", () => {
 	const payload = payloadFor(RISKY);
 	const byId = Object.fromEntries(payload.nodes.map((n) => [n.id, n]));
-	assert.equal(isCovered(payload, byId.O1), false); // no scenario verifies it
+	// plan-only chain: objectives are not judged (no spec to verify them)
+	assert.equal(isCovered(payload, byId.O1), true);
 	assert.equal(isCovered(payload, byId.D1), false); // no covered-by
 	assert.equal(isCovered(payload, byId.R1), false); // high, unmitigated
 	const html = render(RISKY);
 	assert.match(html, /class="badge uncovered"/);
-	assert.match(html, /<tr class="uncovered" data-node="O1"/);
+	assert.match(html, /<tr class="uncovered" data-node="D1"/);
+});
+
+test("objectives are judged once a spec is in the chain", () => {
+	const SPEC = join(FIXTURES, "broken-unverified-contract", "spec.md");
+	const payload = payloadFor(SPEC);
+	const o1 = payload.nodes.find((n) => n.id === "O1");
+	assert.equal(isCovered(payload, o1), true); // S1 verifies O1
 });
 
 test("all four graph components render for the good chain", () => {

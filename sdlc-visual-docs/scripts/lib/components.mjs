@@ -19,14 +19,17 @@ function edgesOf(payload, id) {
 
 /**
  * Coverage per node kind. "Uncovered" means: nothing discharges this node.
- * Scenario coverage by tasks is only judged when the chain has a build file.
+ * Coverage is only judged where the chain can express it: objectives need a
+ * spec in the chain (fast-path chains have no scenarios to verify them);
+ * scenario-by-task coverage needs a build file.
  */
 export function isCovered(payload, node) {
 	const es = payload.edges;
 	const hasBuild = payload.files.some((f) => f.kind === "build");
+	const hasSpec = payload.files.some((f) => f.kind === "spec");
 	switch (node.kind) {
 		case "objective":
-			return es.some((e) => e.type === "verifies" && e.to === node.id);
+			return !hasSpec || es.some((e) => e.type === "verifies" && e.to === node.id);
 		case "contract":
 			return es.some((e) => e.type === "verifies" && e.to === node.id);
 		case "scenario":
