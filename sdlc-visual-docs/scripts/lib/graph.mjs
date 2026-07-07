@@ -1,8 +1,8 @@
 // IA graph parser: front matter, inline heading nodes, upstream chain.
 // Schema: ../../docs/schema.md (v0-experimental). Node built-ins only.
 
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, join, resolve, isAbsolute } from "node:path";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
+import { dirname, join, resolve, isAbsolute, sep } from "node:path";
 
 export const EDGE_TYPES = new Set(["verifies", "implements", "mitigated-by", "covered-by"]);
 export const KINDS = new Set(["plan", "spec", "build"]);
@@ -51,8 +51,9 @@ export function parseInlineLinks(raw) {
 	const re = /\[([^\[\]]*)\]/g;
 	let m;
 	while ((m = re.exec(outer)) !== null) {
-		const parts = m[1].split(",").map((s) => s.trim()).filter(Boolean);
-		if (parts.length !== 3) return { triples: [], error: `inline links entry [${m[1]}] is not a three-element flow list` };
+		const parts = m[1].split(",").map((s) => s.trim());
+		if (parts.length !== 3 || parts.some((p) => !p))
+			return { triples: [], error: `inline links entry [${m[1]}] is not a three-element flow list` };
 		triples.push(parts);
 	}
 	return { triples, error: null };
@@ -96,8 +97,8 @@ export function parseFrontMatter(text) {
 		}
 		if (inLinks && TRIPLE_RE.test(line)) {
 			const inner = line.match(TRIPLE_RE)[1];
-			const parts = inner.split(",").map((s) => s.trim()).filter(Boolean);
-			if (parts.length !== 3) {
+			const parts = inner.split(",").map((s) => s.trim());
+			if (parts.length !== 3 || parts.some((p) => !p)) {
 				errors.push(`links entry ${JSON.stringify(line.trim())} is not a three-element flow list`);
 			} else {
 				meta.links.push(parts);
@@ -203,10 +204,29 @@ export function repoRootFor(startDir) {
 export function resolveUpstream(fromFile, upstream) {
 	const startDir = dirname(resolve(fromFile));
 	const root = repoRootFor(startDir);
+	const boundary = root ?? startDir;
+	let boundaryReal;
+	try {
+		boundaryReal = realpathSync(boundary);
+	} catch {
+		boundaryReal = resolve(boundary);
+	}
 	let dir = startDir;
 	for (;;) {
 		const candidate = join(dir, upstream);
-		if (existsSync(candidate)) return candidate;
+		if (existsSync(candidate)) {
+			// Resolve symlinks and confine the real path within the boundary: an
+			// in-repo symlink (e.g. docs/etc -> /etc) must not let `etc/passwd`
+			// escape the repo and disclose an out-of-tree file.
+			let real;
+			try {
+				real = realpathSync(candidate);
+			} catch {
+				real = resolve(candidate);
+			}
+			if (real === boundaryReal || real.startsWith(boundaryReal + sep)) return real;
+			return null; // resolves (via symlink or otherwise) outside the boundary
+		}
 		// Bound the ancestor walk at the repo root. Without a repo boundary,
 		// resolution is confined to the entry file's own directory, so a value
 		// like `etc/passwd` cannot climb to a filesystem-root file.

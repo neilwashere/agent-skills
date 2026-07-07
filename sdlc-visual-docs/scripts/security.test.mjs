@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 import { lint } from "./lint.mjs";
@@ -62,6 +62,25 @@ test("F1: ancestor walk is bounded (no `..`, no absolute) so it cannot climb to 
 	assert.equal(res.chain.files.length, 1, "walk escaped the entry directory");
 	assert.ok(res.errors.some((e) => /upstream not found/i.test(e)));
 	rmSync(nested, { recursive: true, force: true });
+});
+
+test("F1: an in-repo symlink cannot escape the repo boundary to disclose an out-of-tree file", () => {
+	const base = mkdtempSync(join(tmpdir(), "svd-sym-"));
+	mkdirSync(join(base, "repo", "docs", "plans"), { recursive: true });
+	mkdirSync(join(base, "repo", ".git"), { recursive: true });
+	mkdirSync(join(base, "outside"), { recursive: true });
+	writeFileSync(join(base, "outside", "hostname"), "OUT_OF_TREE_SECRET_XYZ");
+	symlinkSync(join(base, "outside"), join(base, "repo", "docs", "escape"));
+	const planPath = join(base, "repo", "docs", "plans", "plan.md");
+	writeFileSync(
+		planPath,
+		["---", "ia: v0-experimental", "kind: spec", "feature: sym", "upstream: escape/hostname", "---", "", "## S1: x"].join("\n"),
+	);
+	const res = lint(planPath);
+	assert.equal(res.chain.files.length, 1, "symlink escaped the repo boundary");
+	const html = render(planPath);
+	assert.ok(!html.includes("OUT_OF_TREE_SECRET_XYZ"), "symlinked out-of-tree content leaked");
+	rmSync(base, { recursive: true, force: true });
 });
 
 // F2 — JSON island </script> injection
@@ -169,6 +188,15 @@ test("F7: inline links [[...]] parse; a bare [a,b,c] errors instead of vanishing
 	assert.equal(gres2.ok, false, "trailing garbage in inline links was silently accepted");
 	assert.ok(gres2.errors.some((e) => /links/i.test(e)));
 	garbage.cleanup();
+
+	// an empty field must not be filtered away into a valid-looking triple
+	const empty = tmpFile(
+		"spec.md",
+		["---", "ia: v0-experimental", "kind: spec", "feature: inline", "links: [[S1,, verifies, O1]]", "---", "", "## O1: o", "## S1: s"].join("\n"),
+	);
+	const eres = lint(empty.path);
+	assert.equal(eres.ok, false, "empty-field triple was accepted");
+	empty.cleanup();
 });
 
 // F9 — task coverage rule scoped to build artefacts
