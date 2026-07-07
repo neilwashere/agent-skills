@@ -22,6 +22,17 @@ function asset(name) {
 	}
 }
 
+// Escape a JSON payload for safe embedding inside <script>...</script>: a raw
+// JSON.stringify leaves `<`/`>` intact, so a string containing `</script>`
+// would break out of the element (F2). Also neutralise the JS line separators.
+function jsonForScript(obj) {
+	return JSON.stringify(obj)
+		.replace(/</g, "\\u003c")
+		.replace(/>/g, "\\u003e")
+		.replace(/\u2028/g, "\\u2028")
+		.replace(/\u2029/g, "\\u2029");
+}
+
 /** Build the graph JSON island payload (stable ordering, relative paths). */
 export function graphPayload(entryPath, res) {
 	const base = dirname(resolve(entryPath));
@@ -90,7 +101,7 @@ ${banner}
 ${components(payload)}
 ${articles}
 </main>
-<script type="application/json" id="ia-graph">${JSON.stringify(payload)}</script>
+<script type="application/json" id="ia-graph">${jsonForScript(payload)}</script>
 <script>${asset("mermaid.min.js")}</script>
 <script>${asset("app.js")}</script>
 </body>
@@ -100,15 +111,30 @@ ${articles}
 
 function main(argv) {
 	const args = argv.slice(2);
-	const oIdx = args.indexOf("-o");
+	const force = args.includes("--force");
+	const filtered = args.filter((a) => a !== "--force");
+	const oIdx = filtered.indexOf("-o");
 	let out = null;
 	if (oIdx !== -1) {
-		out = args[oIdx + 1];
-		args.splice(oIdx, 2);
+		out = filtered[oIdx + 1];
+		if (!out || out.startsWith("-")) {
+			console.error("usage: node render.mjs <artefact.md> [-o out.html] [--force]");
+			return 2;
+		}
+		filtered.splice(oIdx, 2);
 	}
-	const entry = args[0];
+	const entry = filtered[0];
 	if (!entry) {
-		console.error("usage: node render.mjs <artefact.md> [-o out.html]");
+		console.error("usage: node render.mjs <artefact.md> [-o out.html] [--force]");
+		return 2;
+	}
+	// Gate on lint: a failing artefact (dangling/hostile upstream, malformed
+	// graph) does not render unless --force. This keeps the path-traversal and
+	// malformed cases from producing a normal-looking, shareable page (F4).
+	const res = lint(entry);
+	if (!res.ok && !force) {
+		for (const e of res.errors) console.error(`FAIL ${e}`);
+		console.error(`refusing to render ${entry}: ${res.errors.length} lint error(s). Pass --force to override.`);
 		return 2;
 	}
 	const html = render(entry);

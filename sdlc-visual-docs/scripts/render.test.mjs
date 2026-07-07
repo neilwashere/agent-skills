@@ -23,10 +23,19 @@ test("output is one self-contained page with no network fetches", () => {
 	assert.match(html, /^<!doctype html>/i);
 	assert.match(html, /<style>/);
 	assert.match(html, /<script>/);
-	// no fetched resources; scheme-relative too
-	assert.ok(!/(src|href)=["'](https?:)?\/\//i.test(html), "network resource reference found");
+	// no fetched SUBRESOURCES (src=, or a <link href=). Anchor hrefs to docs are
+	// explicitly allowed by the plan, so this must not flag <a href="https://...">.
+	assert.ok(!/\bsrc=["'](https?:)?\/\//i.test(html), "network src= subresource found");
+	assert.ok(!/<link\b[^>]*href=["'](https?:)?\/\//i.test(html), "network <link href> subresource found");
 	// no timestamps
 	assert.ok(!/\b20\d\d-\d\d-\d\dT\d\d:/.test(html), "timestamp-like string found");
+});
+
+test("doc-link anchors to network URLs are allowed (not treated as fetches)", () => {
+	const html = mdToHtml("see [the docs](https://example.com/guide)");
+	assert.match(html, /<a href="https:\/\/example.com\/guide">the docs<\/a>/);
+	// the subresource guard from the render test must not trip on this anchor
+	assert.ok(!/\bsrc=["'](https?:)?\/\//i.test(html));
 });
 
 test("graph JSON island carries the whole chain", () => {

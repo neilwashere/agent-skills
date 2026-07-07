@@ -10,11 +10,25 @@ export function escapeHtml(s) {
 	return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
+// Allow only navigation-safe href schemes: relative/fragment paths, plus
+// http(s) and mailto (anchors, not subresources). javascript:, data:, vbscript:,
+// file: and friends are dropped so the link renders as inert text. Input is
+// already HTML-escaped, so this guards clickable-scheme XSS on file:// pages.
+export function safeHref(href) {
+	const h = href.trim();
+	const scheme = h.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+	if (!scheme) return h; // relative path or #fragment: safe
+	return /^(https?|mailto):$/i.test(`${scheme[1]}:`) ? h : null;
+}
+
 function inline(s) {
 	let out = escapeHtml(s);
 	// code spans first so their contents are not further formatted
 	out = out.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
-	out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, href) => `<a href="${href}">${text}</a>`);
+	out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, href) => {
+		const safe = safeHref(href);
+		return safe === null ? text : `<a href="${safe}">${text}</a>`;
+	});
 	out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 	out = out.replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
 	return out;
@@ -40,15 +54,22 @@ export function mdToHtml(src) {
 	while (i < lines.length) {
 		const line = lines[i];
 
-		// fenced code
-		const fence = line.match(/^(```|~~~)\s*(\S*)\s*$/);
+		// fenced code: open on a fence line (with optional info string), close only
+		// on a bare marker line of the same char and >= length (CommonMark-ish),
+		// so an info-string line inside the block does not close it early (F6).
+		const fence = line.match(/^(\s*)(`{3,}|~{3,})\s*(\S*)\s*$/);
 		if (fence) {
 			flushPara();
-			const marker = fence[1];
-			const lang = fence[2];
+			const fenceChar = fence[2][0];
+			const fenceLen = fence[2].length;
+			const lang = fence[3];
 			const buf = [];
 			i++;
-			while (i < lines.length && !lines[i].startsWith(marker)) {
+			const isClose = (l) => {
+				const m = l.match(/^\s*(`{3,}|~{3,})\s*$/);
+				return m && m[1][0] === fenceChar && m[1].length >= fenceLen;
+			};
+			while (i < lines.length && !isClose(lines[i])) {
 				buf.push(lines[i]);
 				i++;
 			}

@@ -32,10 +32,31 @@ keys (unknown keys are ignored, reserved for future versions):
 | `upstream` | no (plan: absent) | path to the artefact one phase earlier, relative to the repo root of the artefact |
 | `links` | no | list of `[from, type, to]` edge triples |
 
-The YAML subset is deliberately tiny: string scalars and flow lists
-(`[a, b, c]`) under `links`. No anchors, aliases, nesting, block scalars, or
-multi-line values. Parsers must reject files where `links` entries are not
-three-element flow lists.
+The YAML subset is deliberately tiny: string scalars plus a `links` list of
+three-element flow lists. No anchors, aliases, nesting beyond `links`, block
+scalars, or multi-line values. `links` may be written as a block list:
+
+```yaml
+links:
+  - [S1, verifies, O1]
+  - [R1, mitigated-by, S1]
+```
+
+or as an inline list-of-triples on one line: `links: [[S1, verifies, O1]]`. A
+bare inline `links: [S1, verifies, O1]` (a single flow list, not a list of
+triples) is a hard error rather than a silent drop. Any `links` entry that is
+not a three-element flow list is a lint error, so the file is rejected at the
+lint gate (non-zero exit) and, unless `--force` is passed, the renderer
+refuses it too.
+
+### upstream confinement
+
+`upstream` must be a repo-relative forward path (it is resolved by walking up
+ancestor directories). It may **not** be absolute and may **not** contain a
+`..` segment; either is a hard error and the chain is not followed. This is a
+security boundary: without it, a hostile artefact could point `upstream` at
+`/etc/passwd` or `../../../.ssh/id_rsa` and have the renderer inline that
+file's contents into a shareable HTML page.
 
 ## Nodes
 
@@ -79,6 +100,13 @@ endpoints may live in other files in the upstream chain.
 | `D covered-by S\|T` | recommended | DoD item is discharged by a scenario or task; on the fast path (no spec) `D covered-by T` substitutes for `T implements S` |
 | `R mitigated-by S` | optional; high-severity risks without one are flagged | scenario verifies the mitigation |
 
+**Endpoint kinds are enforced.** Each edge type fixes the node kinds of its
+endpoints, and a mismatch (for example `R1 mitigated-by O1`, pointing a
+mitigation at an objective instead of a scenario) is a lint error, not silent
+false coverage: `verifies` runs scenario → objective|contract; `implements`
+runs task → scenario; `mitigated-by` runs risk → scenario; `covered-by` runs
+dod → scenario|task.
+
 ## Validation (normative lint behaviour)
 
 Fail (exit non-zero):
@@ -91,6 +119,11 @@ Fail (exit non-zero):
 5. Malformed front matter: missing required keys, unknown `kind`, a `links`
    entry that is not a three-element flow list, or an unknown edge type.
 6. Duplicate node IDs anywhere in the chain.
+7. An edge whose endpoint kinds violate its edge shape (see above).
+8. An `upstream` value that is absolute or contains a `..` segment.
+
+The task-coverage rule (4) applies only to task nodes declared in a `build`
+artefact; a stray task heading in a plan or spec is not coverage-checked.
 
 Flag (warn, exit zero): a risk whose section contains `severity: high` and
 has no `mitigated-by` edge.

@@ -2,10 +2,18 @@
 // Schema: ../../docs/schema.md (v0-experimental). Node built-ins only.
 
 import { readFileSync, existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, isAbsolute } from "node:path";
 
 export const EDGE_TYPES = new Set(["verifies", "implements", "mitigated-by", "covered-by"]);
 export const KINDS = new Set(["plan", "spec", "build"]);
+
+// Allowed endpoint kinds per edge type (semantic shape; schema docs/schema.md).
+export const EDGE_SHAPES = {
+	verifies: { from: ["scenario"], to: ["objective", "contract"] },
+	implements: { from: ["task"], to: ["scenario"] },
+	"mitigated-by": { from: ["risk"], to: ["scenario"] },
+	"covered-by": { from: ["dod"], to: ["scenario", "task"] },
+};
 
 const ID_RULES = [
 	[/^O\d+$/, "objective"],
@@ -26,6 +34,30 @@ export function nodeKind(id) {
 }
 
 const TRIPLE_RE = /^\s*-\s*\[([^\]]*)\]\s*$/;
+
+/** Parse an inline `links:` value: a flow list of three-element flow lists,
+ * e.g. `[[S1, verifies, O1], [R1, mitigated-by, S1]]`. Returns
+ * { triples, error }. A bare `[a, b, c]` (not a list of lists) is an error,
+ * so malformed inline links fail loudly instead of vanishing. */
+export function parseInlineLinks(raw) {
+	const triples = [];
+	const re = /\[([^\[\]]*)\]/g;
+	let m;
+	let sawInner = false;
+	while ((m = re.exec(raw)) !== null) {
+		sawInner = true;
+		const parts = m[1].split(",").map((s) => s.trim()).filter(Boolean);
+		if (parts.length !== 3) return { triples: [], error: `inline links entry [${m[1]}] is not a three-element flow list` };
+		triples.push(parts);
+	}
+	// The outer brackets themselves count as one match when the content has no
+	// inner lists (bare `[a, b, c]`): detect that and reject.
+	const outer = raw.trim();
+	if (!sawInner || !outer.startsWith("[[")) {
+		return { triples: [], error: `inline links must be a list of three-element flow lists ([[a, b, c], ...]); got ${outer}` };
+	}
+	return { triples, error: null };
+}
 
 /**
  * Parse the tiny YAML subset the schema allows: string scalars plus a
@@ -55,6 +87,14 @@ export function parseFrontMatter(text) {
 			inLinks = true;
 			continue;
 		}
+		const inlineLinks = line.match(/^links:\s*(\S.*)$/);
+		if (inlineLinks) {
+			inLinks = false;
+			const { triples, error } = parseInlineLinks(inlineLinks[1]);
+			if (error) errors.push(error);
+			else meta.links.push(...triples);
+			continue;
+		}
 		if (inLinks && TRIPLE_RE.test(line)) {
 			const inner = line.match(TRIPLE_RE)[1];
 			const parts = inner.split(",").map((s) => s.trim()).filter(Boolean);
@@ -78,7 +118,6 @@ export function parseFrontMatter(text) {
 }
 
 const HEADING_RE = /^(#{2,4}) (\S+): (.+?)\s*$/;
-const FENCE_RE = /^(```|~~~)/;
 
 /**
  * Extract inline heading nodes from a markdown body. Skips fenced code
@@ -89,13 +128,19 @@ const FENCE_RE = /^(```|~~~)/;
 export function parseNodes(body) {
 	const lines = body.split("\n");
 	const nodes = [];
-	let inFence = false;
+	let fence = null; // { char, len } while inside a fenced block
 	for (let i = 0; i < lines.length; i++) {
-		if (FENCE_RE.test(lines[i])) {
-			inFence = !inFence;
+		const open = lines[i].match(/^\s*(`{3,}|~{3,})/);
+		if (!fence && open) {
+			fence = { char: open[1][0], len: open[1].length };
 			continue;
 		}
-		if (inFence) continue;
+		if (fence) {
+			// A closing fence is a bare marker line (same char, >= length, no info string).
+			const close = lines[i].match(/^\s*(`{3,}|~{3,})\s*$/);
+			if (close && close[1][0] === fence.char && close[1].length >= fence.len) fence = null;
+			continue;
+		}
 		const m = lines[i].match(HEADING_RE);
 		if (!m) continue;
 		const kind = nodeKind(m[2]);
@@ -108,7 +153,7 @@ export function parseNodes(body) {
 		let endLine = lines.length;
 		let fence = false;
 		for (let i = start; i < lines.length; i++) {
-			if (FENCE_RE.test(lines[i])) fence = !fence;
+			if (/^\s*(`{3,}|~{3,})\s*$/.test(lines[i])) fence = !fence;
 			if (fence) continue;
 			const h = lines[i].match(/^(#{1,4}) /);
 			if (h && h[1].length <= nodes[n].level) {
@@ -129,6 +174,15 @@ export function parseNodes(body) {
  * walk up ancestor directories (covers repo-root-relative paths without
  * needing to find the repo root explicitly).
  */
+/** True when an upstream value is safe to resolve: relative, no `..`
+ * segments, no absolute path. Traversal outside the artefact tree is a
+ * security boundary (see security.test.mjs F1). */
+export function upstreamError(upstream) {
+	if (isAbsolute(upstream)) return `upstream path may not be absolute: ${upstream}`;
+	if (upstream.split(/[\\/]/).includes("..")) return `upstream path may not contain "..": ${upstream}`;
+	return null;
+}
+
 export function resolveUpstream(fromFile, upstream) {
 	let dir = dirname(resolve(fromFile));
 	for (;;) {
@@ -167,6 +221,11 @@ export function loadChain(entryPath) {
 		const nodes = parseNodes(body);
 		files.push({ path: current, meta, body, nodes, errors: fmErrors });
 		if (!meta.upstream) break;
+		const uErr = upstreamError(meta.upstream);
+		if (uErr) {
+			errors.push(`${current}: ${uErr}`);
+			break;
+		}
 		const next = resolveUpstream(current, meta.upstream);
 		if (!next) {
 			errors.push(`upstream not found from ${current}: ${meta.upstream}`);
@@ -198,7 +257,7 @@ export function buildGraph(chain) {
 			if (nodes.has(n.id)) {
 				errors.push(`${f.path}: duplicate node ID ${n.id} (first declared in ${nodes.get(n.id).file})`);
 			} else {
-				nodes.set(n.id, { ...n, file: f.path });
+				nodes.set(n.id, { ...n, file: f.path, fileKind: f.meta.kind ?? null });
 			}
 		}
 	}
@@ -207,6 +266,16 @@ export function buildGraph(chain) {
 			if (!EDGE_TYPES.has(type)) errors.push(`${f.path}: unknown edge type "${type}" in [${from}, ${type}, ${to}]`);
 			for (const end of [from, to]) {
 				if (!nodes.has(end)) errors.push(`${f.path}: dangling edge endpoint ${end} in [${from}, ${type}, ${to}]`);
+			}
+			// Endpoint-kind (semantic shape): a verifies edge must run scenario->objective|contract, etc.
+			const shape = EDGE_SHAPES[type];
+			if (shape && nodes.has(from) && nodes.has(to)) {
+				const fk = nodes.get(from).kind;
+				const tk = nodes.get(to).kind;
+				if (!shape.from.includes(fk))
+					errors.push(`${f.path}: edge [${from}, ${type}, ${to}] has wrong source kind (${from} is a ${fk}; ${type} must start at ${shape.from.join("|")})`);
+				if (!shape.to.includes(tk))
+					errors.push(`${f.path}: edge [${from}, ${type}, ${to}] has wrong target kind (${to} is a ${tk}; ${type} must end at a ${shape.to.join("|")})`);
 			}
 			edges.push({ from, type, to, file: f.path });
 		}

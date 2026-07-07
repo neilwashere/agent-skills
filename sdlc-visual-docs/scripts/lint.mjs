@@ -30,7 +30,9 @@ export function lint(entryPath) {
 			const verified = has((e) => e.type === "verifies" && e.to === node.id && nodes.get(e.from)?.kind === "scenario");
 			if (!verified) errors.push(`contract ${node.id} has no verifying scenario`);
 		}
-		if (node.kind === "task") {
+		// Task-coverage rule is scoped to tasks declared in a build artefact
+		// (schema: "In a build artefact"); a stray task node elsewhere is not judged.
+		if (node.kind === "task" && node.fileKind === "build") {
 			const covered = has(
 				(e) => (e.type === "implements" && e.from === node.id) || (e.type === "covered-by" && e.to === node.id),
 			);

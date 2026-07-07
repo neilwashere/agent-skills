@@ -26,8 +26,13 @@ Announce at start: "Using sdlc-visual-docs to lint/render the artefact."
 ```bash
 node scripts/lint.mjs <artefact.md>            # validate the IA graph (follows upstream)
 node scripts/render.mjs <artefact.md> -o out.html   # render one self-contained page
+node scripts/render.mjs <artefact.md> -o out.html --force   # render even if lint fails
 node --test scripts/*.test.mjs                  # run the skill's own tests
 ```
+
+`render.mjs` lints first and **refuses to render a lint-failing artefact**
+unless you pass `--force`; this keeps a malformed or hostile artefact from
+producing a normal-looking, shareable page.
 
 Paths are relative to this skill directory; artefact paths are wherever the
 repo keeps them (e.g. `docs/plans/...`). Rendered output is ephemeral: do not
@@ -69,12 +74,16 @@ nothing may bind to it until a v1 freeze). Summary:
    ---
    ```
 
-   Edge vocabulary: `S verifies O` (required for every scenario), `S verifies
-   C` (required for every contract), `T implements S` (build plans; on the
+   Edge vocabulary and enforced endpoint kinds: `S verifies O|C` (required for
+   every scenario and every contract), `T implements S` (build plans; on the
    fast path, where no spec exists, `D covered-by T` is the substitute),
-   `R mitigated-by S`, `D covered-by S|T`. `upstream` points at the artefact
-   one phase earlier (spec to plan, build to spec or plan); lint and render
-   follow the chain, so cross-document edges are fine.
+   `R mitigated-by S`, `D covered-by S|T`. Endpoint kinds are checked, so
+   `R mitigated-by O` (mitigation pointing at an objective) is a lint error,
+   not silent coverage. `links` may also be inline: `links: [[S1, verifies,
+   O1]]`. `upstream` points at the artefact one phase earlier (spec to plan,
+   build to spec or plan) and must be a repo-relative forward path: absolute
+   paths and `..` segments are rejected (a file-disclosure guard). Lint and
+   render follow the chain, so cross-document edges are fine.
 
 3. **Diagrams** are fenced ```mermaid blocks in the body; the renderer
    inlines them and the vendored Mermaid renders them client-side, offline.
@@ -107,6 +116,12 @@ per-file report of every node found.
 - The markdown renderer is a small hand-rolled subset (headings, paragraphs,
   lists, tables, fenced code, links, bold/italic/inline code, blockquotes).
   Exotic markdown may render as plain paragraphs; keep artefacts simple.
+- **Link safety**: link hrefs are escaped and scheme-checked. Only relative/
+  fragment paths plus `http(s):` and `mailto:` anchors render; `javascript:`,
+  `data:`, and other schemes are dropped to inert text. The graph JSON island
+  is escaped for `<`/`>` so a node title containing `</script>` cannot break
+  out. These close the ways a hostile artefact could inject script into a
+  rendered page opened from disk.
 
 ## Layout
 
