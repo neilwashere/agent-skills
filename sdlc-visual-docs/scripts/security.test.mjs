@@ -47,6 +47,23 @@ test("F1: parent-traversal upstream is rejected", () => {
 	plan.cleanup();
 });
 
+test("F1: ancestor walk is bounded (no `..`, no absolute) so it cannot climb to a filesystem-root file", () => {
+	// A tmp dir has no .git above it, so upstream resolution is confined to the
+	// entry file's own directory; `etc/hostname` must NOT resolve to /etc/hostname.
+	const nested = mkdtempSync(join(tmpdir(), "svd-walk-"));
+	mkdirSync(join(nested, "a", "b"), { recursive: true });
+	const planPath = join(nested, "a", "b", "plan.md");
+	writeFileSync(
+		planPath,
+		["---", "ia: v0-experimental", "kind: spec", "feature: climb", "upstream: etc/hostname", "---", "", "## S1: x"].join("\n"),
+	);
+	const res = lint(planPath);
+	assert.equal(res.ok, false);
+	assert.equal(res.chain.files.length, 1, "walk escaped the entry directory");
+	assert.ok(res.errors.some((e) => /upstream not found/i.test(e)));
+	rmSync(nested, { recursive: true, force: true });
+});
+
 // F2 — JSON island </script> injection
 test("F2: </script> in a node title cannot break out of the JSON island", () => {
 	const plan = tmpFile(
@@ -142,6 +159,16 @@ test("F7: inline links [[...]] parse; a bare [a,b,c] errors instead of vanishing
 	assert.equal(bres.ok, false);
 	assert.ok(bres.errors.some((e) => /links/i.test(e) && /three-element/i.test(e)));
 	bad.cleanup();
+
+	// trailing garbage after a valid triple must error, not be silently dropped
+	const garbage = tmpFile(
+		"spec.md",
+		["---", "ia: v0-experimental", "kind: spec", "feature: inline", "links: [[S1, verifies, O1], junk]", "---", "", "## O1: o", "## S1: s"].join("\n"),
+	);
+	const gres2 = lint(garbage.path);
+	assert.equal(gres2.ok, false, "trailing garbage in inline links was silently accepted");
+	assert.ok(gres2.errors.some((e) => /links/i.test(e)));
+	garbage.cleanup();
 });
 
 // F9 — task coverage rule scoped to build artefacts

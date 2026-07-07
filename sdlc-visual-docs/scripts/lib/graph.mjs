@@ -40,21 +40,20 @@ const TRIPLE_RE = /^\s*-\s*\[([^\]]*)\]\s*$/;
  * { triples, error }. A bare `[a, b, c]` (not a list of lists) is an error,
  * so malformed inline links fail loudly instead of vanishing. */
 export function parseInlineLinks(raw) {
+	const outer = raw.trim();
+	// Whole value must be a bracketed list of bracketed triples and nothing
+	// else: this rejects a bare `[a, b, c]` and trailing garbage like
+	// `[[a, b, c], junk]` instead of silently keeping the parseable prefix.
+	if (!/^\[\s*\[[^\[\]]*\]\s*(,\s*\[[^\[\]]*\]\s*)*\]$/.test(outer)) {
+		return { triples: [], error: `inline links must be a list of three-element flow lists ([[a, b, c], ...]); got ${outer}` };
+	}
 	const triples = [];
 	const re = /\[([^\[\]]*)\]/g;
 	let m;
-	let sawInner = false;
-	while ((m = re.exec(raw)) !== null) {
-		sawInner = true;
+	while ((m = re.exec(outer)) !== null) {
 		const parts = m[1].split(",").map((s) => s.trim()).filter(Boolean);
 		if (parts.length !== 3) return { triples: [], error: `inline links entry [${m[1]}] is not a three-element flow list` };
 		triples.push(parts);
-	}
-	// The outer brackets themselves count as one match when the content has no
-	// inner lists (bare `[a, b, c]`): detect that and reject.
-	const outer = raw.trim();
-	if (!sawInner || !outer.startsWith("[[")) {
-		return { triples: [], error: `inline links must be a list of three-element flow lists ([[a, b, c], ...]); got ${outer}` };
 	}
 	return { triples, error: null };
 }
@@ -147,24 +146,30 @@ export function parseNodes(body) {
 		if (!kind) continue;
 		nodes.push({ id: m[2], kind, title: m[3], level: m[1].length, line: i + 1, severity: null });
 	}
-	// severity: scan each node's section
+	// severity: scan each node's section, using the same structured fence
+	// tracking as the node scan so a `severity:` line inside an info-string
+	// code block is not read as real severity.
 	for (let n = 0; n < nodes.length; n++) {
 		const start = nodes[n].line; // first line after the heading (1-based heading line)
-		let endLine = lines.length;
-		let fence = false;
+		let fence = null;
+		let severity = null;
 		for (let i = start; i < lines.length; i++) {
-			if (/^\s*(`{3,}|~{3,})\s*$/.test(lines[i])) fence = !fence;
-			if (fence) continue;
-			const h = lines[i].match(/^(#{1,4}) /);
-			if (h && h[1].length <= nodes[n].level) {
-				endLine = i;
-				break;
+			const open = lines[i].match(/^\s*(`{3,}|~{3,})/);
+			if (!fence && open) {
+				fence = { char: open[1][0], len: open[1].length };
+				continue;
 			}
-		}
-		for (let i = start; i < endLine; i++) {
+			if (fence) {
+				const close = lines[i].match(/^\s*(`{3,}|~{3,})\s*$/);
+				if (close && close[1][0] === fence.char && close[1].length >= fence.len) fence = null;
+				continue;
+			}
+			const h = lines[i].match(/^(#{1,4}) /);
+			if (h && h[1].length <= nodes[n].level) break;
 			const sev = lines[i].match(/^severity:\s*(low|medium|high)\s*$/);
-			if (sev) nodes[n].severity = sev[1];
+			if (sev) severity = sev[1];
 		}
+		nodes[n].severity = severity;
 	}
 	return nodes;
 }
@@ -183,11 +188,29 @@ export function upstreamError(upstream) {
 	return null;
 }
 
+/** Nearest ancestor directory containing a `.git` entry (file or dir), or
+ * null. This is the boundary for repo-relative upstream resolution. */
+export function repoRootFor(startDir) {
+	let dir = startDir;
+	for (;;) {
+		if (existsSync(join(dir, ".git"))) return dir;
+		const parent = dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
+	}
+}
+
 export function resolveUpstream(fromFile, upstream) {
-	let dir = dirname(resolve(fromFile));
+	const startDir = dirname(resolve(fromFile));
+	const root = repoRootFor(startDir);
+	let dir = startDir;
 	for (;;) {
 		const candidate = join(dir, upstream);
 		if (existsSync(candidate)) return candidate;
+		// Bound the ancestor walk at the repo root. Without a repo boundary,
+		// resolution is confined to the entry file's own directory, so a value
+		// like `etc/passwd` cannot climb to a filesystem-root file.
+		if (!root || dir === root) return null;
 		const parent = dirname(dir);
 		if (parent === dir) return null;
 		dir = parent;
