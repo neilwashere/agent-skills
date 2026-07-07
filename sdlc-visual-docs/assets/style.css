@@ -1,0 +1,93 @@
+/* sdlc-visual-docs — inlined into every rendered page. */
+:root {
+	--bg: #ffffff;
+	--fg: #1a1d21;
+	--muted: #5c6570;
+	--line: #d9dee3;
+	--accent: #2456a6;
+	--objective: #2456a6;
+	--contract: #7a3fa0;
+	--scenario: #1c7a4c;
+	--task: #a05e1c;
+	--risk-high: #b3261e;
+	--risk-medium: #b3771e;
+	--risk-low: #6b7280;
+	--dod: #3d6b8a;
+	--uncovered-bg: #fdecea;
+	--highlight-bg: #fff6d6;
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+	color: var(--fg);
+	background: var(--bg);
+}
+header.page {
+	border-bottom: 2px solid var(--line);
+	padding: 1rem 2rem;
+}
+header.page h1 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+header.page .meta { color: var(--muted); font-size: 0.85rem; }
+main { max-width: 72rem; margin: 0 auto; padding: 1rem 2rem 4rem; }
+section.component { margin: 1.5rem 0; border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; }
+section.component > h2 { margin-top: 0; font-size: 1.05rem; }
+article.artefact { margin: 2rem 0; }
+article.artefact > .provenance {
+	color: var(--muted);
+	font-size: 0.8rem;
+	border-bottom: 1px solid var(--line);
+	padding-bottom: 0.25rem;
+	margin-bottom: 0.75rem;
+}
+h2.node, h3.node, h4.node { scroll-margin-top: 1rem; }
+.node-objective { color: var(--objective); }
+.node-contract { color: var(--contract); }
+.node-scenario { color: var(--scenario); }
+.node-task { color: var(--task); }
+.node-dod { color: var(--dod); }
+pre { background: #f6f8fa; border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem; overflow-x: auto; }
+code { background: #f0f2f5; border-radius: 3px; padding: 0 0.2em; font-size: 0.9em; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 0.75rem 0; }
+th, td { border: 1px solid var(--line); padding: 0.3rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: #f6f8fa; }
+blockquote { margin: 0.75rem 0; padding: 0.1rem 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+figure.diagram { margin: 1rem 0; text-align: center; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 1.5rem 0; }
+.banner-errors { background: var(--uncovered-bg); border: 1px solid var(--risk-high); border-radius: 6px; padding: 0.5rem 1rem; margin: 1rem 0; }
+.banner-errors ul { margin: 0.25rem 0; }
+
+/* trace matrix */
+.trace { width: 100%; font-size: 0.85rem; }
+.trace .id { font-weight: 600; white-space: nowrap; }
+.trace tr.uncovered td { background: var(--uncovered-bg); }
+.trace .kind { color: var(--muted); white-space: nowrap; }
+.trace .edges span { display: inline-block; margin-right: 0.5rem; white-space: nowrap; }
+.badge { display: inline-block; border-radius: 999px; padding: 0 0.55em; font-size: 0.75rem; border: 1px solid var(--line); }
+.badge.uncovered { border-color: var(--risk-high); color: var(--risk-high); }
+.badge.ok { border-color: var(--scenario); color: var(--scenario); }
+
+/* risk map */
+.risks .risk { border-left: 4px solid var(--risk-low); padding: 0.25rem 0.75rem; margin: 0.5rem 0; }
+.risks .risk.high { border-left-color: var(--risk-high); }
+.risks .risk.medium { border-left-color: var(--risk-medium); }
+.risks .risk .sev { text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; color: var(--muted); }
+.risks.filter-high .risk:not(.high) { display: none; }
+.risks.filter-medium .risk:not(.medium) { display: none; }
+.risks.filter-low .risk:not(.low) { display: none; }
+
+/* DoD checklist */
+.dod li { list-style: none; margin: 0.3rem 0; }
+.dod li::before { content: "✔ "; color: var(--scenario); }
+.dod li.uncovered::before { content: "✘ "; color: var(--risk-high); }
+.dod ul { padding-left: 0.5rem; }
+
+/* interactivity */
+[data-node] { cursor: pointer; }
+.highlight { background: var(--highlight-bg); }
+.dim { opacity: 0.35; }
+section.component.collapsed > *:not(h2) { display: none; }
+section.component > h2::after { content: " ▾"; color: var(--muted); }
+section.component.collapsed > h2::after { content: " ▸"; }
+button.linklike { background: none; border: 1px solid var(--line); border-radius: 4px; padding: 0.1rem 0.5rem; cursor: pointer; font-size: 0.8rem; }

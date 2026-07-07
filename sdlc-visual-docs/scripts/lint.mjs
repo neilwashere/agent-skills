@@ -9,11 +9,12 @@ import { loadChain, buildGraph } from "./lib/graph.mjs";
 
 /**
  * Lint one artefact (following its upstream chain).
- * Returns { ok, errors, warnings, report, chain }.
+ * Returns { ok, errors, warnings, report, chain, graph }.
  */
 export function lint(entryPath) {
 	const chain = loadChain(entryPath);
-	const { nodes, edges, errors } = buildGraph(chain);
+	const graph = buildGraph(chain);
+	const { nodes, edges, errors } = graph;
 	const warnings = [];
 
 	const has = (pred) => edges.some(pred);
@@ -47,7 +48,7 @@ export function lint(entryPath) {
 		nodes: f.nodes.map((n) => n.id),
 	}));
 
-	return { ok: errors.length === 0, errors, warnings, report, chain };
+	return { ok: errors.length === 0, errors, warnings, report, chain, graph };
 }
 
 function main(argv) {
