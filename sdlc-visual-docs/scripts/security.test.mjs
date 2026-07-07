@@ -83,6 +83,27 @@ test("F1: an in-repo symlink cannot escape the repo boundary to disclose an out-
 	rmSync(base, { recursive: true, force: true });
 });
 
+test("F1: a symlinked ENTRY artefact cannot disclose an out-of-tree file", () => {
+	const base = mkdtempSync(join(tmpdir(), "svd-entry-"));
+	mkdirSync(join(base, "repo", "docs"), { recursive: true });
+	mkdirSync(join(base, "repo", ".git"), { recursive: true });
+	mkdirSync(join(base, "outside"), { recursive: true });
+	// a valid IA artefact that would otherwise lint+render cleanly
+	writeFileSync(
+		join(base, "outside", "secret.md"),
+		["---", "ia: v0-experimental", "kind: plan", "feature: evil", "---", "", "## O1: HOSTILE_ENTRY_SECRET"].join("\n"),
+	);
+	const entry = join(base, "repo", "docs", "entry.md");
+	symlinkSync(join(base, "outside", "secret.md"), entry);
+	const res = lint(entry);
+	assert.equal(res.ok, false);
+	assert.equal(res.chain.files.length, 0, "symlinked entry was read despite escaping the boundary");
+	assert.ok(res.errors.some((e) => /entry path escapes/i.test(e)));
+	const html = render(entry);
+	assert.ok(!html.includes("HOSTILE_ENTRY_SECRET"), "symlinked entry content leaked into render");
+	rmSync(base, { recursive: true, force: true });
+});
+
 // F2 — JSON island </script> injection
 test("F2: </script> in a node title cannot break out of the JSON island", () => {
 	const plan = tmpFile(

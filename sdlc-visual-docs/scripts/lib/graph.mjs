@@ -201,16 +201,28 @@ export function repoRootFor(startDir) {
 	}
 }
 
+/** Real path of an existing candidate file if it stays within the boundary
+ * derived from `fromDir` (the nearest `.git` root, or `fromDir` itself when
+ * there is no repo), else null. Symlinks are resolved before the check, so a
+ * symlink escaping the repo is rejected. If either realpath cannot be taken
+ * (transient error, race), we reject rather than trust a syntactic path
+ * — fail closed, no TOCTOU fallback. Both the entry artefact and every
+ * upstream hop pass through here, so confinement is uniform. */
+export function confinedRealPath(fromDir, absCandidate) {
+	let boundaryReal;
+	let real;
+	try {
+		boundaryReal = realpathSync(repoRootFor(fromDir) ?? fromDir);
+		real = realpathSync(absCandidate);
+	} catch {
+		return null;
+	}
+	return real === boundaryReal || real.startsWith(boundaryReal + sep) ? real : null;
+}
+
 export function resolveUpstream(fromFile, upstream) {
 	const startDir = dirname(resolve(fromFile));
 	const root = repoRootFor(startDir);
-	const boundary = root ?? startDir;
-	let boundaryReal;
-	try {
-		boundaryReal = realpathSync(boundary);
-	} catch {
-		boundaryReal = resolve(boundary);
-	}
 	let dir = startDir;
 	for (;;) {
 		const candidate = join(dir, upstream);
@@ -218,14 +230,7 @@ export function resolveUpstream(fromFile, upstream) {
 			// Resolve symlinks and confine the real path within the boundary: an
 			// in-repo symlink (e.g. docs/etc -> /etc) must not let `etc/passwd`
 			// escape the repo and disclose an out-of-tree file.
-			let real;
-			try {
-				real = realpathSync(candidate);
-			} catch {
-				real = resolve(candidate);
-			}
-			if (real === boundaryReal || real.startsWith(boundaryReal + sep)) return real;
-			return null; // resolves (via symlink or otherwise) outside the boundary
+			return confinedRealPath(startDir, candidate); // real path, or null on escape
 		}
 		// Bound the ancestor walk at the repo root. Without a repo boundary,
 		// resolution is confined to the entry file's own directory, so a value
@@ -247,6 +252,17 @@ export function loadChain(entryPath) {
 	const errors = [];
 	const seen = new Set();
 	let current = resolve(entryPath);
+	// Confine the entry artefact itself to its own repo boundary before the
+	// first read: a symlinked entry path (or a symlinked directory component)
+	// must not disclose an out-of-tree file. Same rule as every upstream hop.
+	if (existsSync(current)) {
+		const entryReal = confinedRealPath(dirname(current), current);
+		if (!entryReal) {
+			errors.push(`${entryPath}: entry path escapes its repo boundary (symlink to outside the repo?)`);
+			return { files, errors };
+		}
+		current = entryReal;
+	}
 	while (current) {
 		if (seen.has(current)) {
 			errors.push(`upstream cycle at ${current}`);
