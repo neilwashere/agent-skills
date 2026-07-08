@@ -30,59 +30,76 @@ self-identify. Edit the methodology in exactly one place.
 
 ## Pick an instantiation path
 
-Two ways to fan the one template out across models. Both are first-class.
+Two ways to fan the one template out across models. Both are first-class; see
+the `dispatch-subagents` skill for the full mechanics of either.
 
-### Path A — `subagent` tool + generated agent files (in-harness, what this session used)
+### Path A — `subagent` tool, one shared agent, per-task model override (in-harness, default choice)
 
-The `subagent` tool dispatches by **agent name**, and an agent's model is fixed
-by its frontmatter — so you need one small agent file per model. Generate them
-from the template instead of hand-writing:
+pi-subagents accepts `model` as a **per-task** override in a single `tasks: [...]`
+call, so — unlike the original version of this workflow — you no longer need
+one agent file per model. One static, model-agnostic agent is enough:
 
 ```bash
-scripts/gen-adversaries.sh \
-  deepseek/deepseek-v4-pro \
-  zai-coding-cn/glm-5.1 \
-  kimi-ai/kimi-k2.7-code \
-  amazon-bedrock/eu.anthropic.claude-opus-4-8=opus \
-  openai/gpt-5.5=gpt
+scripts/ensure-adversary-agent.sh --user   # or --dir .pi/agents for project scope
 ```
 
-- Each arg is `provider/model` or `provider/model=alias`. The alias (or the
-  model's last segment, sanitized) becomes the agent name `adversary-<alias>`.
-- Writes to `.pi/agents/` by default (project scope); `--user` targets
-  `~/.pi/agent/agents/`. `--clean` removes previously generated `adversary-*`
-  files. `--tools "read,grep,find,ls,bash"` overrides the default tool set.
-- Then dispatch them in parallel with the `subagent` tool (`agentScope: both`,
-  `confirmProjectAgents: false`), one task per agent, same task body.
+A plain re-run is idempotent (no-op) when nothing changed, and refuses to
+overwrite if `adversary.md` exists with *different* content — so a hand-edit
+isn't silently clobbered. After editing `assets/adversary.prompt.md`, re-run
+with `--force` to refresh it. No per-model files, nothing to `--clean`. Then
+dispatch the panel in one call:
 
-Pros: results come back inline, no detachment gotchas. Cons: writes throwaway
-agent files (regenerate any time; they are not the source of truth).
+```ts
+subagent({ tasks: [
+  { agent: "adversary", task: "<shared task block>", model: "deepseek/deepseek-v4-pro" },
+  { agent: "adversary", task: "<shared task block>", model: "zai-coding-cn/glm-5.2" },
+  { agent: "adversary", task: "<shared task block>", model: "moonshotai/kimi-k2.7-code" },
+  { agent: "adversary", task: "<shared task block>", model: "amazon-bedrock/global.anthropic.claude-opus-4-8" },
+] })
+```
 
-### Path B — detached CLI, zero per-model files (see the `dispatch-subagents` skill)
+Per-model attribution comes from each task's `result.model`/`result.usage` in
+the tool result directly — not from prompt text — so there's no need to stamp
+REVIEWER_TAG per model here (the shared `adversary.md` substitutes it once,
+generically, at generation time). For a long panel (multiple `thinking: high`
+models), add `async: true` and call `wait({ all: true })` instead of holding
+one blocking tool call open — see `dispatch-subagents` for the foreground vs
+background tradeoffs and the headless-notification caveat.
 
-`dispatch-subagents` already stamps ONE prompt file across `--model` flags via
-its own `REVIEWER_TAG` replacement and survives tool-call process-group reaping
-with `setsid`. Use it when you want no agent files at all:
+Pros: results come back inline (or via `wait`), no detachment gotchas, no
+per-model files to regenerate or clean up. Cons: requires `pi-subagents`
+installed and a live pi session/tool call to dispatch from.
+
+### Path B — detached CLI, zero agent files at all (see the `dispatch-subagents` skill)
+
+For a headless/non-pi-session context (cron, CI, a plain shell script), fall
+back to `dispatch-subagents`' detached-CLI mechanics — it stamps ONE prompt
+file across `--model` flags via its own `REVIEWER_TAG` replacement and
+survives tool-call process-group reaping with `setsid`:
 
 ```bash
 ~/.agents/skills/dispatch-subagents/scripts/dispatch.sh \
   --prompt /tmp/adversary.prompt.txt --out /tmp/run1 --thinking high \
-  --model deepseek/deepseek-v4-pro --model zai-coding-cn/glm-5.1 \
-  --model kimi-ai/kimi-k2.7-code --model amazon-bedrock/eu.anthropic.claude-opus-4-8
+  --model deepseek/deepseek-v4-pro --model zai-coding-cn/glm-5.2 \
+  --model moonshotai/kimi-k2.7-code --model amazon-bedrock/global.anthropic.claude-opus-4-8
 ```
 
 Build `/tmp/adversary.prompt.txt` from `assets/adversary.prompt.md` plus the
-concrete task block (see below). Follow that skill for model discovery
-(`list-models.sh`), the 0-byte-log-is-not-failure rule, and monitoring.
+concrete task block (see below). Follow the `dispatch-subagents` skill for
+model discovery (`list-models.sh`), the 0-byte-log-is-not-failure rule (still
+true for this path — unlike Path A, a bad model id here fails silently, not
+loudly), and monitoring.
 
 ## Workflow
 
 1. **Scope.** Get the PR (`gh pr view N --json …`), the head SHA
    (`git rev-parse HEAD` — full 40 chars; you need it for inline comments), and
    the diff: `git diff origin/<base>...HEAD > /tmp/review.diff`.
-2. **Verify the models exist** before dispatching — a hallucinated model id just
-   produces an empty run. `~/.agents/skills/dispatch-subagents/scripts/list-models.sh`
-   lists providers with creds + the catalog.
+2. **Verify the models exist** before dispatching. On Path B (detached CLI) a
+   hallucinated model id just produces an empty run; on Path A (`subagent`
+   tool) a bad id now fails loudly per task, but a dead key/quota still only
+   surfaces mid-run. `~/.agents/skills/dispatch-subagents/scripts/list-models.sh`
+   lists providers with creds + the catalog either way.
 3. **Build the task block** (appended to the template, or passed as the subagent
    task): repo path, **exact** diff path, **exact** commit SHA, which files to
    read, and "read the full files, not just the diff." For a verification pass,

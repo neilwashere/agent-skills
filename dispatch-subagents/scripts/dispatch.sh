@@ -9,7 +9,7 @@
 #
 # Usage:
 #   ./dispatch.sh --prompt PROMPT.txt --out /tmp/run1 \
-#       --model amazon-bedrock/eu.anthropic.claude-opus-4-8 \
+#       --model amazon-bedrock/global.anthropic.claude-opus-4-8 \
 #       --model kimi-ai/kimi-k2.7-code \
 #       --model zai-coding-cn/glm-5.2 \
 #       --model deepseek/deepseek-v4-pro
