@@ -27,9 +27,10 @@ Skip skill creation unless both hold:
   does the thing well unprompted, the skill is a **no-op**: it spends context
   to say nothing. Don't write it.
 
-Where it lives (full paths in the spec reference): machine-global personal law
-in `~/.pi/agent/skills/`; cross-harness workflow tooling in `~/.agents/skills/`;
-project-specific rules in the repo's `.pi/skills/`.
+Where it lives (full paths in the spec reference): every hand-authored global
+skill — personal law and cross-harness workflow tooling alike — in
+`~/.agents/skills/`, a single version-controlled repo; project-specific rules in
+the repo's `.pi/skills/`.
 
 ## Phase 1 — understand it with concrete examples
 

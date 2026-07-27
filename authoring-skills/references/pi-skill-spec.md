@@ -44,10 +44,12 @@ Discovery rules:
   are **ignored** — those need the directory + `SKILL.md` form.
 - Name collisions across locations warn and keep the first found.
 
-Convention in this setup: `~/.pi/agent/skills/` holds machine-global personal
-law (coding conventions, house style); `~/.agents/skills/` holds cross-harness
-workflow tooling not tied to one project; a repo's `.pi/skills/` holds rules
-specific to that project.
+Convention in this setup: `~/.agents/skills/` holds every hand-authored global
+skill — both machine-global personal law (coding conventions, house style) and
+cross-harness workflow tooling — as one version-controlled repo, so a single
+clone provisions a new machine. A repo's `.pi/skills/` holds rules specific to
+that project. `~/.pi/agent/skills/` is left empty by choice; it stays a valid
+discovery location, just an unused one.
 
 ## Directory shape
 
