@@ -5,6 +5,8 @@ One clone provisions every hand-authored skill on a new machine.
 
 ## Provisioning a new machine
 
+**Full runbook: [`SETUP.md`](SETUP.md).** The short version:
+
 ```bash
 git clone git@github.com:neilwashere/agent-skills.git ~/.agents/skills
 ```
