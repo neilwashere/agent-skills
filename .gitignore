@@ -1,2 +1,5 @@
 # scratch output from dispatch runs, if ever placed here
 *.log
+
+# vendored upstream source, re-clone at version parity instead of committing 43M
+herdr/
