@@ -14,6 +14,16 @@ That is the whole skill install. Discovery is by convention — pi scans
 entry in `settings.json` is required. (Root-level `.md` files are *ignored* in
 this location; a skill must be a directory with a `SKILL.md`.)
 
+Global pi extensions ship in this repo too, but pi discovers them from
+`~/.pi/agent/extensions/`, so they must be copied rather than just cloned:
+
+```bash
+cp -a ~/.agents/skills/extensions/. ~/.pi/agent/extensions/
+```
+
+See `extensions/README.md` — one of those files is herdr-generated and is better
+regenerated than copied.
+
 Not covered by this repo, and needed separately:
 
 - **Package-provided skills** — declared in `~/.pi/agent/settings.json` under
@@ -23,7 +33,6 @@ Not covered by this repo, and needed separately:
   `threadsafe-systems` repos that will fail to fetch while unauthenticated.
 - **Credentials** — `~/.pi/agent/auth.json` is machine-local. Re-authenticate on
   the new machine; do not copy it.
-- **Global extensions** — `~/.pi/agent/extensions/`.
 
 ## Layout convention
 
@@ -73,6 +82,11 @@ single version-controlled home. Project-specific rules belong in that repo's
 - **teach** — stateful, multi-session teaching of a topic. Slash-command only
   (`disable-model-invocation: true`), so it will not appear in the model-visible
   skill list.
+
+## Non-skill contents
+
+- **`extensions/`** — global pi extensions (see above). Contains no `SKILL.md`,
+  so skill discovery ignores it.
 
 ## Deliberate exclusions
 

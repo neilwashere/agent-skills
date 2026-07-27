@@ -1,0 +1,4 @@
+{
+	"maxSubagentSpawnsPerSession": 200,
+	"scheduledRuns": { "enabled": true }
+}
