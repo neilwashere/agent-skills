@@ -31,6 +31,9 @@ Not covered by this repo, and needed separately:
   vscode, youtube-transcript, plus pi-sdlc / pi-worktree / pi-repo-html /
   pi-lens / pi-subagents). Run `gh auth login` **first** — several are private
   `threadsafe-systems` repos that will fail to fetch while unauthenticated.
+  `pi-settings.reference.json` in this repo is a snapshot of those settings to
+  copy from; merge it into `~/.pi/agent/settings.json` rather than replaying it
+  blindly, and treat it as a snapshot that can go stale.
 - **Credentials** — `~/.pi/agent/auth.json` is machine-local. Re-authenticate on
   the new machine; do not copy it.
 
@@ -87,6 +90,26 @@ single version-controlled home. Project-specific rules belong in that repo's
 
 - **`extensions/`** — global pi extensions (see above). Contains no `SKILL.md`,
   so skill discovery ignores it.
+- **`pi-settings.reference.json`** — snapshot of `~/.pi/agent/settings.json`
+  (packages, enabled models, defaults). Contains no credentials; `auth.json` is
+  separate and deliberately excluded.
+
+## Pinned git packages drift silently
+
+Git packages are pinned refs, and `pi update --extensions` / `--all`
+deliberately do **not** move a pin to a newer ref — they only reconcile the
+clone to the ref already configured. A stale clone can therefore sit far behind
+the ref named in settings (this bit us: settings said `pi-sdlc@v2.4.0` while the
+working clone was still on a `v1.0.2` commit, so sessions silently loaded a much
+older skill). To move a pin, use the one-shot that updates settings *and* the
+checkout:
+
+```bash
+pi install git:github.com/threadsafe-systems/pi-sdlc@v3.0.0
+```
+
+Verify with `git -C ~/.pi/agent/git/github.com/<host-path> log -1`, not by
+trusting the settings pin.
 
 ## Deliberate exclusions
 
