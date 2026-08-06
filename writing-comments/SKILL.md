@@ -30,6 +30,15 @@ a project historian could love.
 5. **The staleness test.** If a comment could become false without this file
    changing, it is already wrong. (References to other slices, future work,
    review events, and current call-site lists all fail this test.)
+6. **The law covers every string that ships, not just comments.** A
+   `description`, an `error_message`, an assertion message, a log line, a test
+   name and a resource `name` are all read by someone who has no plan and no PR.
+   Infrastructure makes this sharper: a resource name is often immutable, so a
+   plan id written there outlives the plan that produced it, and changing it
+   later means replacing the resource.
+7. **Name the role, not the person.** "The security owner holds root", not "Sam
+   holds root". People change roles and leave; the constraint does not. Personnel
+   belong in a register with an owner column, updated in one place.
 
 ## Worked examples (from real review history)
 
@@ -95,10 +104,44 @@ earn their place because they **change caller obligations**, and they say
 what the code does now — no eviction policy that doesn't exist, no plan
 citations, no "later slice".
 
+### Rubbish: the plan id in a shipped string
+
+```hcl
+variable "region_pin_exempt_actions" {
+  description = "Actions SCP-01 permits outside eu-west-2. Spec C2's closed list; extensions are reviewed pull requests."
+}
+
+# ec2:Describe* is deliberately absent — an owner decision recorded in the build
+# plan (A-B14), not an oversight.
+```
+
+"Spec C2", "A-B14" and "reviewed pull requests" are all invisible to the person
+reading this in the console at 3am. "Deliberately", "not an oversight" and
+"owner decision" are an argument with a reviewer. Strip all of it and the
+operational fact survives intact:
+
+```hcl
+variable "region_pin_exempt_actions" {
+  description = "Actions permitted outside eu-west-2. Widening this widens the only preventive region control in the estate."
+}
+
+# ec2:Describe* is absent, so any call that enumerates resources in another
+# region is denied — including read-only verification, which reports the other
+# sixteen regions as uninspected rather than clean.
+```
+
+**One carve-out, for verification output only.** A check script may print the
+scenario or control id it evidences — `S13-EXCEPTIONS: pass` — because mapping a
+run to the thing it proves is that line's whole job. It does not extend to the
+comments in the same file.
+
 ## Checklist before you commit
 
 - [ ] Would this comment make sense to someone who has never seen the plan,
       the PR, or this conversation?
+- [ ] Is it a `description`, `error_message`, log line, test name or resource
+      name? → the same rules apply, and an immutable name applies them hardest.
+- [ ] Does it name a person for something a role owns? → name the role.
 - [ ] Does it reference any issue number, plan section, DoD id, review
       finding, or phase/slice name? → delete the reference.
 - [ ] Does it describe something absent, removed, or future? → delete, or
