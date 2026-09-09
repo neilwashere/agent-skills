@@ -2,7 +2,7 @@
 // managed by herdr; reinstalling or updating the integration overwrites this file.
 // add custom hooks/plugins beside this file instead of editing it.
 // HERDR_INTEGRATION_ID=pi
-// HERDR_INTEGRATION_VERSION=6
+// HERDR_INTEGRATION_VERSION=8
 // @ts-nocheck
 
 import net from "node:net";
@@ -142,29 +142,6 @@ function sendState(state: AgentState, message?: string, seq = nextReportSeq()): 
   });
 }
 
-function releaseAgent(): Promise<void> {
-  return sendRequest({
-    id: `${source}:release:${Date.now()}:${Math.random().toString(36).slice(2)}`,
-    method: "pane.release_agent",
-    params: {
-      pane_id: paneId,
-      source,
-      agent: "pi",
-      seq: nextReportSeq(),
-    },
-  });
-}
-
-function shouldReleaseOnSessionShutdown(event: any): boolean {
-  // Pi tears down and rebinds extension runtimes for internal lifecycle actions
-  // such as /reload, /new, /resume, and /fork. Those do not mean the pane's
-  // agent process has exited, and releasing hook authority there can suppress
-  // legitimate reports from the replacement runtime. Only a user/process quit
-  // should release Herdr's full-lifecycle authority.
-  const reason = event?.reason;
-  return reason === "quit";
-}
-
 let sendInFlight = false;
 let queuedState: QueuedState | undefined;
 
@@ -195,6 +172,30 @@ async function drainStateQueue(): Promise<void> {
   }
 }
 
+// --- BEGIN herdr:busy overlay ---
+type BusyOverlay = {
+  count: number;
+  message?: string;
+};
+
+function updateBusyOverlay(overlay: BusyOverlay, data: unknown): void {
+  const event =
+    typeof data === "object" && data !== null
+      ? (data as Record<string, unknown>)
+      : undefined;
+  if (event?.active === true) {
+    overlay.count += 1;
+    overlay.message = typeof event.label === "string" ? event.label : undefined;
+    return;
+  }
+
+  overlay.count = Math.max(0, overlay.count - 1);
+  if (overlay.count === 0) {
+    overlay.message = undefined;
+  }
+}
+// --- END herdr:busy overlay ---
+
 export default function (pi) {
   if (!enabled()) {
     return;
@@ -207,17 +208,11 @@ export default function (pi) {
   let lastMessage: string | undefined;
   let rootSession = false;
 
-  // --- BEGIN custom patch: pi-subagents async visibility (local, not from herdr) ---
-  // herdr's built-in agent_start/agent_settled hooks only see the root session's
-  // own turn. nicobailon/pi-subagents runs async subagents as detached OS
-  // processes, which never touch those hooks, so the root pane looks idle while
-  // a background subagent is still working. This tracks outstanding async run
-  // ids from pi-subagents' own pi.events and folds them into the same working
-  // state this file already reports under source "herdr:pi". Reapply after any
-  // `herdr integration install pi` update via herdr-pi-subagents-patch.sh beside
-  // this file.
-  const subagentRunIds = new Set<string>();
-  // --- END custom patch ---
+  // --- BEGIN herdr:busy overlay ---
+  // Sibling integrations raise a counted overlay while work continues outside
+  // the root Pi turn, and lower it before changing the displayed label.
+  const busyOverlay: BusyOverlay = { count: 0 };
+  // --- END herdr:busy overlay ---
 
   function desiredState() {
     if (blockedCount > 0) {
@@ -226,12 +221,11 @@ export default function (pi) {
     if (agentActive) {
       return { state: "working" as const, message: undefined };
     }
-    // --- BEGIN custom patch: pi-subagents async visibility ---
-    if (subagentRunIds.size > 0) {
-      const n = subagentRunIds.size;
-      return { state: "working" as const, message: `${n} background subagent${n === 1 ? "" : "s"} running` };
+    // --- BEGIN herdr:busy overlay ---
+    if (busyOverlay.count > 0) {
+      return { state: "working" as const, message: busyOverlay.message };
     }
-    // --- END custom patch ---
+    // --- END herdr:busy overlay ---
     return { state: "idle" as const, message: undefined };
   }
 
@@ -263,32 +257,20 @@ export default function (pi) {
     publishState();
   });
 
-  // --- BEGIN custom patch: pi-subagents async visibility ---
-  pi.events.on("subagent:async-started", (data: any) => {
+  // --- BEGIN herdr:busy overlay ---
+  pi.events.on("herdr:busy", (data: unknown) => {
     if (!rootSession) {
       return;
     }
-    const id = data?.id;
-    if (typeof id === "string" && id) {
-      subagentRunIds.add(id);
-    }
+    updateBusyOverlay(busyOverlay, data);
     publishState();
   });
-
-  pi.events.on("subagent:async-complete", (data: any) => {
-    if (!rootSession) {
-      return;
-    }
-    const id = data?.id;
-    if (typeof id === "string" && id) {
-      subagentRunIds.delete(id);
-    }
-    publishState();
-  });
-  // --- END custom patch ---
+  // --- END herdr:busy overlay ---
 
   pi.on("session_start", async (event, ctx) => {
-    if (ctx?.hasUI !== true) {
+    // TUI only: RPC/JSON/print modes are headless (no PTY herdr can display),
+    // and RPC still reports hasUI=true, so mode is the reliable gate.
+    if (ctx?.mode !== "tui") {
       return;
     }
     rootSession = true;
@@ -316,14 +298,5 @@ export default function (pi) {
 
     agentActive = false;
     publishState();
-  });
-
-  pi.on("session_shutdown", async (event) => {
-    if (!rootSession) {
-      return;
-    }
-    if (shouldReleaseOnSessionShutdown(event)) {
-      await releaseAgent();
-    }
   });
 }
