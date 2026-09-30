@@ -124,6 +124,12 @@ lifecycle events.
 
 ## Models enabled on this machine (verified 2026-07-08; re-check with list-models.sh)
 
+`list-models.sh` asks `pi --list-models`, which counts credentials from auth.json,
+provider environment variables (e.g. `ZAI_API_KEY`) and the AWS chain for Bedrock.
+Do not judge availability from auth.json alone: providers set by environment
+never appear there, which is how zai seats were once skipped as "absent".
+Run it in the environment the dispatch will use, since env credentials are per process.
+
 Same provider/id strings work for both dispatch paths.
 
 | Provider (`--provider` / task `model` prefix) | Model | Notes |
@@ -142,8 +148,9 @@ task (see above); a cheap PONG smoke test is still worth it to catch an
 auth/quota problem before a big dispatch, on either path.
 
 ```bash
-./scripts/list-models.sh                 # providers w/ creds, default, custom catalog
-./scripts/list-models.sh --grep opus     # grep the builtin pi-ai catalog for a model
+./scripts/list-models.sh                 # providers pi can run + whether each enabledModel runs
+./scripts/list-models.sh --grep opus     # runnable ids matching a pattern
+./scripts/list-models.sh --check anthropic/claude-opus-5:high zai/glm-5.3   # ok / cannot run; exit 1 if any cannot
 pi --provider deepseek --model deepseek-v4-pro --print --no-session "Reply PONG"
 ```
 

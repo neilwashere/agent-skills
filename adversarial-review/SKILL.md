@@ -98,8 +98,9 @@ loudly), and monitoring.
 2. **Verify the models exist** before dispatching. On Path B (detached CLI) a
    hallucinated model id just produces an empty run; on Path A (`subagent`
    tool) a bad id now fails loudly per task, but a dead key/quota still only
-   surfaces mid-run. `~/.agents/skills/dispatch-subagents/scripts/list-models.sh`
-   lists providers with creds + the catalog either way.
+   surfaces mid-run. `~/.agents/skills/dispatch-subagents/scripts/list-models.sh --check <ids>`
+   says which seats pi can run here (from `pi --list-models`, so env-var
+   credentials count) and exits 1 if any cannot.
 3. **Build the task block** (appended to the template, or passed as the subagent
    task): repo path, **exact** diff path, **exact** commit SHA, which files to
    read, and "read the full files, not just the diff." For a verification pass,

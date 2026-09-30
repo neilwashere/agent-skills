@@ -1,73 +1,87 @@
 #!/usr/bin/env bash
-# list-models.sh — discover which pi providers/models are actually available
-# on THIS machine before dispatching sub-agents. Saves you from dispatching
-# jobs against a hallucinated model id that silently exits.
+# list-models.sh — which provider/model ids pi can actually run on THIS machine,
+# asked of pi itself, before dispatching sub-agents against them.
 #
-# Usage: ./list-models.sh [--grep PATTERN]
+# Usage:
+#   list-models.sh                         providers pi can run, with counts, plus the
+#                                          enabledModels from settings.json and whether each runs
+#   list-models.sh --grep PATTERN          runnable ids matching PATTERN (extended regex, case-insensitive)
+#   list-models.sh --all                   every runnable id
+#   list-models.sh --check ID [ID ...]     "ok" or "cannot run" per provider/model id; a ":thinking"
+#                                          suffix is ignored. Exits 1 if any id cannot run.
 #
-# Sources (in order of authority):
-#   1. ~/.pi/agent/auth.json      → which providers have credentials
-#   2. ~/.pi/agent/settings.json  → the configured default provider/model
-#   3. ~/.pi/agent/models.json    → custom/override model catalog (per provider)
-#   4. pi-ai builtin catalog       → node_modules/@earendil-works/pi-ai/dist/providers/<provider>.models.js
+# The source of truth is `pi --list-models`, which lists a model only when its
+# provider has credentials pi can resolve: auth.json entries, provider
+# environment variables (ZAI_API_KEY, MOONSHOT_API_KEY, ...), the AWS profile or
+# credentials chain for amazon-bedrock, and models.json. Reading auth.json alone
+# misses every provider configured by environment, which is how zai and Bedrock
+# seats used to be wrongly reported as absent.
 #
-# Built-in provider models (bedrock, zai, deepseek, ...) are NOT in models.json;
-# they live in the pi-ai package catalog. This script greps both.
+# "Can run" means credentials are configured, not that they work right now:
+# an expired key, an exhausted quota or a lapsed SSO session still only shows
+# up at dispatch. A one-line PONG smoke test catches those:
+#   pi -p --no-tools --no-session --model <provider/model> "Reply PONG"
+#
+# Credentials come from the calling environment, so run this in the same
+# environment the dispatch will run in (e.g. a pane shell that sources your secrets).
 set -uo pipefail
 
-GREP_PAT="${2:-}"
-AGENT_DIR="${PI_AGENT_DIR:-$HOME/.pi/agent}"
+AGENT_DIR="${PI_CODING_AGENT_DIR:-${PI_AGENT_DIR:-$HOME/.pi/agent}}"
+mode=summary
+pattern=""
+ids=()
+case "${1:-}" in
+  "") ;;
+  --grep) mode=grep; pattern="${2:-}"; [ -n "$pattern" ] || { echo "usage: $0 --grep PATTERN" >&2; exit 2; } ;;
+  --all) mode=all ;;
+  --check) mode=check; shift; ids=("$@"); [ "${#ids[@]}" -gt 0 ] || { echo "usage: $0 --check provider/model [...]" >&2; exit 2; } ;;
+  -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
+esac
 
-echo "=== providers with credentials (auth.json) ==="
-python3 - "$AGENT_DIR/auth.json" <<'PY'
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-    for k, v in d.items():
-        print(f"  {k:18} ({v.get('type','?')})")
-except FileNotFoundError:
-    print("  (no auth.json)")
-PY
-
-echo "=== configured default (settings.json) ==="
-python3 - "$AGENT_DIR/settings.json" <<'PY'
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-    print(f"  {d.get('defaultProvider','?')} / {d.get('defaultModel','?')}  (thinking: {d.get('defaultThinkingLevel','?')})")
-except FileNotFoundError:
-    print("  (no settings.json)")
-PY
-
-echo "=== custom model catalog (models.json) ==="
-python3 - "$AGENT_DIR/models.json" <<'PY'
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-    provs = d.get("providers", d)
-    for pname, pdata in provs.items():
-        models = pdata.get("models", pdata) if isinstance(pdata, dict) else pdata
-        ids = [m.get("id") if isinstance(m, dict) else m for m in models] if isinstance(models, list) else list(models.keys())
-        print(f"  {pname}: {', '.join(ids)}")
-except FileNotFoundError:
-    print("  (no models.json)")
-PY
-
-echo "=== builtin pi-ai catalog (grep) ==="
-# Resolve the pi-ai providers dir from the nearest node_modules, else the global install.
-PIAI=""
-for d in "./node_modules/@earendil-works/pi-ai/dist/providers" \
-	"$HOME/.nvm/versions/node/"*/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers; do
-	[ -d "$d" ] && PIAI="$d" && break
-done
-if [ -z "$PIAI" ]; then
-	echo "  (pi-ai catalog not found; run from a project with pi-ai installed)"
-else
-	echo "  catalog: $PIAI"
-	if [ -n "$GREP_PAT" ]; then
-		grep -rhoE "\"[a-z0-9][a-z0-9._-]+\"" "$PIAI"/*.models.js 2>/dev/null |
-			tr -d '"' | sort -u | grep -iE "$GREP_PAT" | sed 's/^/    /'
-	else
-		echo "  (pass a model substring as 2nd arg to grep the catalog, e.g. --grep opus)"
-	fi
+command -v pi >/dev/null 2>&1 || { echo "pi is not on PATH" >&2; exit 2; }
+if ! table=$(pi --list-models 2>/dev/null); then
+  echo "pi --list-models failed" >&2
+  exit 2
 fi
+# provider/model, one per line
+runnable=$(printf '%s\n' "$table" | awk 'NR > 1 && NF >= 2 { print $1 "/" $2 }' | sort -u)
+[ -n "$runnable" ] || { echo "pi lists no runnable models: no provider has credentials in this environment" >&2; exit 2; }
+
+can_run() { printf '%s\n' "$runnable" | grep -qxF "${1%%:*}"; }
+
+case "$mode" in
+  all)
+    printf '%s\n' "$runnable"
+    ;;
+  grep)
+    printf '%s\n' "$runnable" | grep -iE -- "$pattern" || { echo "no runnable model matches $pattern" >&2; exit 1; }
+    ;;
+  check)
+    missing=0
+    for id in "${ids[@]}"; do
+      if can_run "$id"; then
+        printf 'ok          %s\n' "$id"
+      else
+        printf 'cannot run  %s\n' "$id"
+        missing=1
+      fi
+    done
+    exit "$missing"
+    ;;
+  summary)
+    echo "=== providers pi can run here (pi --list-models) ==="
+    printf '%s\n' "$runnable" | cut -d/ -f1 | uniq -c | awk '{ printf "  %-20s %s models\n", $2, $1 }'
+    echo "=== default and enabledModels (settings.json) ==="
+    if [ -f "$AGENT_DIR/settings.json" ] && command -v jq >/dev/null 2>&1; then
+      default=$(jq -r 'if .defaultProvider and .defaultModel then "\(.defaultProvider)/\(.defaultModel)" else empty end' "$AGENT_DIR/settings.json")
+      [ -n "$default" ] && printf '  default  %s  %s\n' "$default" "$(can_run "$default" && echo ok || echo 'CANNOT RUN')"
+      jq -r '.enabledModels[]? // empty' "$AGENT_DIR/settings.json" | while read -r id; do
+        printf '  enabled  %s  %s\n' "$id" "$(can_run "$id" && echo ok || echo 'CANNOT RUN')"
+      done
+    else
+      echo "  (no settings.json, or jq is missing)"
+    fi
+    echo "(--grep PATTERN or --all for ids; --check ID... to verify specific seats)"
+    ;;
+esac
