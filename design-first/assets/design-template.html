@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>#ISSUE — Deliverable Title</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #151b26;
+      --panel-alt: #0f141f;
+      --border: #273246;
+      --text: #e6edf3;
+      --muted: #93a1b5;
+      --accent: #7aa2f7;
+      --ok: #73daca;
+      --warn: #e0af68;
+      --bad: #f7768e;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px 20px 64px;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 var(--sans);
+    }
+    main { max-width: 960px; margin: 0 auto; }
+    header {
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    h1 { font-size: 24px; line-height: 1.25; margin: 0 0 10px; letter-spacing: -0.01em; }
+    h2 {
+      font-size: 17px;
+      margin: 30px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h3 { font-size: 15px; margin: 18px 0 8px; color: var(--accent); }
+    p, ul, ol { margin: 8px 0; }
+    li { margin: 4px 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font: 13px/1.45 var(--mono);
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font: 12px/1.4 var(--mono);
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-block;
+      font: 11px/1.3 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+    }
+    .badge.normative { border-color: rgba(122, 162, 247, 0.45); color: var(--accent); }
+    .badge.informative { border-color: rgba(147, 161, 181, 0.35); color: var(--muted); }
+    .callout {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      padding: 12px 15px;
+      margin: 12px 0;
+    }
+    .callout.warn { border-left-color: var(--warn); }
+    .callout.risk { border-left-color: var(--bad); }
+    .callout.ok { border-left-color: var(--ok); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--panel); font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+    pre {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      font: 13px/1.5 var(--mono);
+      margin: 12px 0;
+    }
+    pre code { background: none; border: 0; padding: 0; }
+    pre.gherkin { border-left: 3px solid var(--ok); }
+    pre.mermaid, .mermaid-diagram {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      margin: 12px 0;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+<!-- Authoring rules: every revision stands alone as current truth (< 48 KiB, zero DR/changelog/custody noise). -->
+<main>
+  <header>
+    <h1>#ISSUE — Concise Outcome-Focused Title</h1>
+    <div class="meta">
+      <span>Issue: <a href="https://github.com/ORG/REPO/issues/ISSUE">#ISSUE</a> · LINEAR-ID</span>
+      <span>Baseline: <code>COMMIT_SHA</code></span>
+      <span>Scope: Single-PR / Multi-slice</span>
+    </div>
+  </header>
+
+  <section id="summary">
+    <h2>1. Executive Summary <span class="badge normative">Normative</span></h2>
+    <!-- 3–5 sentences: problem, delivered user/system outcome, and explicit non-goals. -->
+    <p>State the problem, the exact user or system outcome delivered, and what is out of scope.</p>
+  </section>
+
+  <section id="triage">
+    <h2>2. Triage, Contradictions &amp; Gate 1 Decisions <span class="badge normative">Normative</span></h2>
+    <table>
+      <thead>
+        <tr><th>Ticket / Assumption</th><th>Reality in Code &amp; In-Flight Work</th><th>Resolution</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Claim from the ticket</td>
+          <td>Confirmed or falsified with <code>path/file:symbol</code> and active PR check</td>
+          <td>Consequence for scope or design</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Omit this callout when no open decisions remain for Gate 1. -->
+    <div class="callout warn">
+      <strong>Decisions Requested at Gate 1:</strong>
+      <ul>
+        <li><strong>D1 — Short title:</strong> Options, trade-off, and recommended choice.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="shape">
+    <h2>3. Domain &amp; System Shape <span class="badge normative">Normative</span></h2>
+    <!-- Include erDiagram, stateDiagram-v2, or sequenceDiagram blocks where cardinality, lifecycle, or ordering matters. -->
+    <pre class="mermaid">
+erDiagram
+  MATTER ||--o{ MATTER_PARTY : "seats"
+  LENDER ||--o{ PAYEE_ACCOUNT : "owns"
+  MATTER ||--o{ PAYEE_RECEIPT : "records"
+    </pre>
+
+    <h3>Deep-Module Interface</h3>
+    <!-- Public contract, invariants, ordering guarantees, and refusal modes only; omit private helper prescriptions. -->
+    <pre><code>// Module boundary, inputs/outputs, invariants, and refusal modes</code></pre>
+
+    <h3>Vertical Slice Plan</h3>
+    <table>
+      <thead>
+        <tr><th>Slice</th><th>Outcome &amp; Seam</th><th>Scenarios Delivered</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Slice 0 (if needed)</td><td>Behaviour-preserving refactor of decaying seam</td><td>Existing suite unchanged</td></tr>
+        <tr><td>Slice 1</td><td>End-to-end vertical capability</td><td><code>@SC-1</code>, <code>@SC-2</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="specs">
+    <h2>4. Behavioural Specifications (Gherkin) <span class="badge normative">Normative</span></h2>
+    <pre class="gherkin">Feature: Short business capability name
+  One-sentence statement of who benefits and what invariant holds.
+
+  Rule: Business invariant grouping related scenarios
+
+    @SC-1 @seam:service
+    Scenario: Happy-path observable behaviour
+      Given starting domain state
+      When one actor action or inbound event occurs
+      Then observable state and output hold
+
+    @SC-2 @seam:service
+    Scenario: Refusal on violated precondition leaves state untouched
+      Given precondition that violates the rule
+      When the same action is attempted
+      Then the action is refused with the domain reason
+      And no record, message, or side effect is written</pre>
+  </section>
+
+  <section id="nfrs">
+    <h2>5. NFRs, Risk, Compliance &amp; Observability <span class="badge normative">Normative</span></h2>
+    <!-- Keep only applicable rows; fill each kept row with concrete design invariants rather than generic prose. -->
+    <table>
+      <thead>
+        <tr><th>Concern</th><th>Requirement / Invariant</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Error &amp; Unknown-Outcome Handling</td><td>Timeouts, retry bounds, and fail-closed handling when an external call has an unknown outcome.</td></tr>
+        <tr><td>Idempotency &amp; Concurrency</td><td>Duplicate request/webhook/queue redelivery handling, lock ordering, and TOCTOU race prevention.</td></tr>
+        <tr><td>Security, Authority &amp; Compliance</td><td>Domain and regulatory invariants (CLC client money, sale/purchase side separation, fail-closed AML, precedent fidelity, UK GDPR / EU residency, RLS + REVOKE, PII / PostHog replay masking, or task/template authority).</td></tr>
+        <tr><td>Rollout &amp; Coexistence</td><td>Additive migration order, mixed-version safety, existing-data handling, and rollback path.</td></tr>
+        <tr><td>Production Observability</td><td>Exact PostHog event, metric, or structured log field + post-merge verification window (zero PII/secrets).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="discovery">
+    <h2>6. Discovery Notes &amp; Blast Radius <span class="badge informative">Informative · Non-Binding</span></h2>
+    <!-- Non-binding context forwarded to implementers; internal structure may vary provided Sections 1–5 hold. -->
+    <ul>
+      <li><strong>Verified Code Anchors:</strong> <code>path/to/module.ts</code> (<code>symbolName</code>) — current behaviour and callers.</li>
+      <li><strong>Blast Radius &amp; In-Flight Collisions:</strong> Callers/readers affected and open PRs or sibling tasks sharing touched files.</li>
+      <li><strong>Candidate Test Seams:</strong> Existing test files/fixtures to extend (<code>path/to/test</code>).</li>
+      <li><strong>Broken-Window Assessment:</strong> Boy Scout cleanup / Slice 0 PR / high-bar follow-up / leave untouched.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
